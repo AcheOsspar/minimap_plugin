@@ -5,7 +5,6 @@ function sendViewportInfo() {
   const zoom = figma.viewport.zoom;
   const center = figma.viewport.center;
 
-  // Extraemos nodos del canvas para tener una idea del tamaño del mundo
   const nodes = figma.currentPage.children;
   const nodeData = nodes.map(node => ({
     x: node.absoluteTransform[0][2],
@@ -26,5 +25,10 @@ sendViewportInfo();
 figma.ui.onmessage = msg => {
   if (msg.type === 'move-to') {
     figma.viewport.center = { x: msg.x, y: msg.y };
+  }
+  if (msg.type === 'move-complete') {
+    setTimeout(() => {
+      sendViewportInfo();
+    }, 150); // un poco más de delay para asegurar suavidad
   }
 };

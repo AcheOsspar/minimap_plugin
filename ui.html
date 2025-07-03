@@ -2,10 +2,18 @@
   <body style="margin:0;">
     <canvas id="minimap" width="300" height="300"></canvas>
     <script>
-      let nodes = [];
-      let viewport = {};
       const canvas = document.getElementById('minimap');
       const ctx = canvas.getContext('2d');
+
+      let nodes = [];
+      let viewport = {};
+      let minimapZoom = 1.0;
+
+      let margin = 20;
+      let offsetX = 0;
+      let offsetY = 0;
+      let scale = 1;
+      let isDragging = false;
 
       onmessage = (event) => {
         const msg = event.data.pluginMessage;
@@ -17,18 +25,20 @@
       };
 
       function draw() {
+        if (!nodes.length || !viewport.bounds) return;
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#f2f2f2';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const margin = 20;
         const bounds = getCanvasBounds(nodes);
-        const scale = getScale(bounds, canvas.width - margin * 2, canvas.height - margin * 2);
+        const scaleBase = getScale(bounds, canvas.width - margin * 2, canvas.height - margin * 2);
+        scale = scaleBase * minimapZoom;
 
-        const offsetX = margin - bounds.minX * scale;
-        const offsetY = margin - bounds.minY * scale;
+        offsetX = margin - bounds.minX * scale;
+        offsetY = margin - bounds.minY * scale;
 
-        // Dibujar todos los nodos
+        // Dibujar nodos
         ctx.fillStyle = "#ccc";
         nodes.forEach(n => {
           ctx.fillRect(
@@ -49,42 +59,8 @@
           vb.width * scale,
           vb.height * scale
         );
-
-        // Drag para navegación
-        let isDragging = false;
-
-        canvas.addEventListener("mousedown", (e) => {
-          isDragging = true;
-          handleDrag(e);
-        });
-
-        canvas.addEventListener("mousemove", (e) => {
-          if (isDragging) handleDrag(e);
-        });
-
-        canvas.addEventListener("mouseup", () => {
-          isDragging = false;
-        });
-
-        canvas.addEventListener("mouseleave", () => {
-          isDragging = false;
-        });
-
-        function handleDrag(e) {
-          const x = (e.offsetX - offsetX) / scale;
-          const y = (e.offsetY - offsetY) / scale;
-
-          parent.postMessage({
-            pluginMessage: {
-              type: 'move-to',
-              x,
-              y
-            }
-          }, '*');
-        }
       }
 
-      // 💡 Estas van fuera de `draw()`
       function getCanvasBounds(nodes) {
         const allX = nodes.flatMap(n => [n.x, n.x + n.width]);
         const allY = nodes.flatMap(n => [n.y, n.y + n.height]);
@@ -101,6 +77,52 @@
         const contentHeight = bounds.maxY - bounds.minY;
         return Math.min(maxWidth / contentWidth, maxHeight / contentHeight);
       }
+
+      function handleDrag(e) {
+        if (!scale) return;
+        const x = (e.offsetX - offsetX) / scale;
+        const y = (e.offsetY - offsetY) / scale;
+
+        parent.postMessage({
+          pluginMessage: {
+            type: 'move-to',
+            x,
+            y
+          }
+        }, '*');
+      }
+
+      // ✅ Eventos solo se agregan una vez
+      canvas.addEventListener("mousedown", (e) => {
+        isDragging = true;
+        handleDrag(e);
+      });
+
+      canvas.addEventListener("mousemove", (e) => {
+        if (isDragging) handleDrag(e);
+      });
+
+      canvas.addEventListener("mouseup", () => {
+        isDragging = false;
+        parent.postMessage({ pluginMessage: { type: 'move-complete' } }, '*');
+      });
+
+      canvas.addEventListener("mouseleave", () => {
+        isDragging = false;
+      });
+
+      // 👇 Zoom visual con scroll
+      canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          minimapZoom *= 1.1;
+        } else {
+          minimapZoom /= 1.1;
+        }
+
+        minimapZoom = Math.max(0.2, Math.min(minimapZoom, 5));
+        draw();
+      });
     </script>
   </body>
 </html>
