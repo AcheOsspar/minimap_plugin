@@ -58,13 +58,15 @@
       let viewport = {};
       let minimapZoom = 1.0;
 
-      const margin = 20;
-      let offsetX = 0;
-      let offsetY = 0;
       let scale = 1;
-      let isDragging = false;
+      const margin = 20;
 
-      // Para arrastrar con clic derecho
+      // Desplazamiento manual del canvas del minimapa (pan)
+      let panOffsetX = 0;
+      let panOffsetY = 0;
+
+      // Flags de interacción
+      let isDragging = false;
       let isRightDragging = false;
       let rightDragStart = { x: 0, y: 0 };
       let offsetStart = { x: 0, y: 0 };
@@ -74,9 +76,6 @@
         if (msg.type === 'init') {
           viewport = msg.viewport;
           nodes = msg.nodes;
-          // Reset offset al recibir datos para que no quede desplazado si cambian nodos
-          offsetX = 0;
-          offsetY = 0;
           draw();
         }
       };
@@ -92,32 +91,37 @@
         const scaleBase = getScale(bounds, canvas.width - margin * 2, canvas.height - margin * 2);
         scale = scaleBase * minimapZoom;
 
-        // Calculamos offset considerando desplazamiento con clic derecho
-        const baseOffsetX = margin - bounds.minX * scale;
-        const baseOffsetY = margin - bounds.minY * scale;
+        // Centrar viewport en canvas
+        const vb = viewport.bounds;
+        const viewportCenterX = vb.x + vb.width / 2;
+        const viewportCenterY = vb.y + vb.height / 2;
 
-        // Sumamos offset por desplazamiento (clic derecho)
-        const totalOffsetX = baseOffsetX + offsetX;
-        const totalOffsetY = baseOffsetY + offsetY;
+        const canvasCenterX = canvas.width / 2;
+        const canvasCenterY = canvas.height / 2;
 
-        // Dibujamos nodos
+        const baseOffsetX = canvasCenterX - viewportCenterX * scale;
+        const baseOffsetY = canvasCenterY - viewportCenterY * scale;
+
+        const offsetX = baseOffsetX + panOffsetX;
+        const offsetY = baseOffsetY + panOffsetY;
+
+        // Dibujar nodos
         ctx.fillStyle = "#ccc";
         nodes.forEach(n => {
           ctx.fillRect(
-            n.x * scale + totalOffsetX,
-            n.y * scale + totalOffsetY,
+            n.x * scale + offsetX,
+            n.y * scale + offsetY,
             n.width * scale,
             n.height * scale
           );
         });
 
-        // Dibujamos viewport
-        const vb = viewport.bounds;
+        // Dibujar viewport
         ctx.strokeStyle = "#000";
         ctx.lineWidth = 2;
         ctx.strokeRect(
-          vb.x * scale + totalOffsetX,
-          vb.y * scale + totalOffsetY,
+          vb.x * scale + offsetX,
+          vb.y * scale + offsetY,
           vb.width * scale,
           vb.height * scale
         );
@@ -143,13 +147,25 @@
       }
 
       function handleDrag(e) {
-        const baseOffsetX = margin - getCanvasBounds(nodes).minX * scale;
-        const baseOffsetY = margin - getCanvasBounds(nodes).minY * scale;
-        const totalOffsetX = baseOffsetX + offsetX;
-        const totalOffsetY = baseOffsetY + offsetY;
+        const bounds = getCanvasBounds(nodes);
+        const scaleBase = getScale(bounds, canvas.width - margin * 2, canvas.height - margin * 2);
+        scale = scaleBase * minimapZoom;
 
-        const x = (e.offsetX - totalOffsetX) / scale;
-        const y = (e.offsetY - totalOffsetY) / scale;
+        const vb = viewport.bounds;
+        const viewportCenterX = vb.x + vb.width / 2;
+        const viewportCenterY = vb.y + vb.height / 2;
+
+        const canvasCenterX = canvas.width / 2;
+        const canvasCenterY = canvas.height / 2;
+
+        const baseOffsetX = canvasCenterX - viewportCenterX * scale;
+        const baseOffsetY = canvasCenterY - viewportCenterY * scale;
+
+        const offsetX = baseOffsetX + panOffsetX;
+        const offsetY = baseOffsetY + panOffsetY;
+
+        const x = (e.offsetX - offsetX) / scale;
+        const y = (e.offsetY - offsetY) / scale;
 
         parent.postMessage({
           pluginMessage: {
@@ -160,14 +176,15 @@
         }, '*');
       }
 
+      // Interacción mouse
       canvas.addEventListener("contextmenu", e => e.preventDefault());
 
       canvas.addEventListener("mousedown", (e) => {
-        if (e.button === 2) { // clic derecho
+        if (e.button === 2) {
           isRightDragging = true;
           rightDragStart = { x: e.clientX, y: e.clientY };
-          offsetStart = { x: offsetX, y: offsetY };
-        } else if (e.button === 0) { // clic izquierdo
+          offsetStart = { x: panOffsetX, y: panOffsetY };
+        } else if (e.button === 0) {
           isDragging = true;
           handleDrag(e);
         }
@@ -177,10 +194,8 @@
         if (isRightDragging) {
           const dx = e.clientX - rightDragStart.x;
           const dy = e.clientY - rightDragStart.y;
-
-          offsetX = offsetStart.x + dx;
-          offsetY = offsetStart.y + dy;
-
+          panOffsetX = offsetStart.x + dx;
+          panOffsetY = offsetStart.y + dy;
           draw();
         } else if (isDragging) {
           handleDrag(e);
@@ -201,6 +216,7 @@
         isRightDragging = false;
       });
 
+      // Zoom con scroll
       canvas.addEventListener("wheel", (e) => {
         e.preventDefault();
         if (e.deltaY < 0) {
@@ -211,6 +227,7 @@
         draw();
       });
 
+      // Zoom con botones
       zoomInBtn.onclick = () => {
         minimapZoom = Math.min(minimapZoom * 1.1, 5);
         draw();
@@ -223,8 +240,8 @@
 
       resetBtn.onclick = () => {
         minimapZoom = 1.0;
-        offsetX = 0;
-        offsetY = 0;
+        panOffsetX = 0;
+        panOffsetY = 0;
         draw();
       };
     </script>
