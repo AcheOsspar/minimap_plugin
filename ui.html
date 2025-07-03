@@ -1,0 +1,106 @@
+<html>
+  <body style="margin:0;">
+    <canvas id="minimap" width="300" height="300"></canvas>
+    <script>
+      let nodes = [];
+      let viewport = {};
+      const canvas = document.getElementById('minimap');
+      const ctx = canvas.getContext('2d');
+
+      onmessage = (event) => {
+        const msg = event.data.pluginMessage;
+        if (msg.type === 'init') {
+          viewport = msg.viewport;
+          nodes = msg.nodes;
+          draw();
+        }
+      };
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#f2f2f2';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const margin = 20;
+        const bounds = getCanvasBounds(nodes);
+        const scale = getScale(bounds, canvas.width - margin * 2, canvas.height - margin * 2);
+
+        const offsetX = margin - bounds.minX * scale;
+        const offsetY = margin - bounds.minY * scale;
+
+        // Dibujar todos los nodos
+        ctx.fillStyle = "#ccc";
+        nodes.forEach(n => {
+          ctx.fillRect(
+            n.x * scale + offsetX,
+            n.y * scale + offsetY,
+            n.width * scale,
+            n.height * scale
+          );
+        });
+
+        // Dibujar viewport
+        const vb = viewport.bounds;
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
+          vb.x * scale + offsetX,
+          vb.y * scale + offsetY,
+          vb.width * scale,
+          vb.height * scale
+        );
+
+        // Drag para navegación
+        let isDragging = false;
+
+        canvas.addEventListener("mousedown", (e) => {
+          isDragging = true;
+          handleDrag(e);
+        });
+
+        canvas.addEventListener("mousemove", (e) => {
+          if (isDragging) handleDrag(e);
+        });
+
+        canvas.addEventListener("mouseup", () => {
+          isDragging = false;
+        });
+
+        canvas.addEventListener("mouseleave", () => {
+          isDragging = false;
+        });
+
+        function handleDrag(e) {
+          const x = (e.offsetX - offsetX) / scale;
+          const y = (e.offsetY - offsetY) / scale;
+
+          parent.postMessage({
+            pluginMessage: {
+              type: 'move-to',
+              x,
+              y
+            }
+          }, '*');
+        }
+      }
+
+      // 💡 Estas van fuera de `draw()`
+      function getCanvasBounds(nodes) {
+        const allX = nodes.flatMap(n => [n.x, n.x + n.width]);
+        const allY = nodes.flatMap(n => [n.y, n.y + n.height]);
+        return {
+          minX: Math.min(...allX),
+          maxX: Math.max(...allX),
+          minY: Math.min(...allY),
+          maxY: Math.max(...allY),
+        };
+      }
+
+      function getScale(bounds, maxWidth, maxHeight) {
+        const contentWidth = bounds.maxX - bounds.minX;
+        const contentHeight = bounds.maxY - bounds.minY;
+        return Math.min(maxWidth / contentWidth, maxHeight / contentHeight);
+      }
+    </script>
+  </body>
+</html>
